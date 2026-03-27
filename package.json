@@ -1,0 +1,51 @@
+{
+  "name": "openacp-cowork",
+  "version": "1.0.1",
+  "description": "Multi-agent coordination layer built on top of OpenACP",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "openacp",
+    "openacp-plugin",
+    "cowork",
+    "multi-agent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Open-ACP/OpenACP-Cowork"
+  },
+  "engines": {
+    "node": ">=20",
+    "openacp": ">=2026.0326.0"
+  },
+  "peerDependencies": {
+    "@openacp/cli": ">=2026.0326.0"
+  },
+  "dependencies": {
+    "nanoid": "^5.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@openacp/cli": "file:../OpenACP",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
+  }
+}
