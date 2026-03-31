@@ -18,7 +18,6 @@ export interface CoworkBridgeDeps {
 
 export class CoworkBridge {
   private textBuffers: Map<string, string> = new Map();
-  private explicitStatusPosted: Set<string> = new Set();
   private toolCallBuffers: Map<string, string[]> = new Map();
   private pendingNotifications: Map<string, number> = new Map();
   private memberSessionIds: Set<string>;
@@ -76,7 +75,6 @@ export class CoworkBridge {
 
   disconnect(): void {
     this.textBuffers.clear();
-    this.explicitStatusPosted.clear();
     this.toolCallBuffers.clear();
     this.pendingNotifications.clear();
   }
@@ -94,22 +92,7 @@ export class CoworkBridge {
     const accumulated = existing + content;
     this.textBuffers.set(sessionId, accumulated);
 
-    if (STATUS_PATTERN.test(accumulated) && accumulated.includes("\n")) {
-      const statusMatch = accumulated.match(/\[STATUS\]([\s\S]*)/);
-      if (statusMatch) {
-        const statusContent = statusMatch[1].trim();
-        if (statusContent.length > 0) {
-          // Don't broadcast if this session is responding to a notification
-          const pending = this.pendingNotifications.get(sessionId) ?? 0;
-          if (pending === 0) {
-            this.broadcastStatus(sessionId, statusContent);
-          }
-          this.explicitStatusPosted.add(sessionId);
-          this.textBuffers.set(sessionId, "");
-        }
-      }
-    }
-
+    // Trim buffer if too large and no [STATUS] detected
     if (accumulated.length > 5000 && !STATUS_PATTERN.test(accumulated)) {
       this.textBuffers.set(sessionId, accumulated.slice(-2000));
     }
@@ -120,10 +103,23 @@ export class CoworkBridge {
     const pending = this.pendingNotifications.get(sessionId) ?? 0;
     if (pending > 0) {
       this.pendingNotifications.set(sessionId, pending - 1);
+      this.textBuffers.set(sessionId, "");
+      this.toolCallBuffers.delete(sessionId);
+      return;
     }
 
-    // Explicit [STATUS] already handled in handleTextEvent — just clean up
-    this.explicitStatusPosted.delete(sessionId);
+    // Check for [STATUS] block in accumulated text (now that turn is complete)
+    const text = (this.textBuffers.get(sessionId) ?? "");
+    if (STATUS_PATTERN.test(text)) {
+      const statusMatch = text.match(/\[STATUS\]([\s\S]*)/);
+      if (statusMatch) {
+        const statusContent = statusMatch[1].trim();
+        if (statusContent.length > 0) {
+          this.broadcastStatus(sessionId, statusContent);
+        }
+      }
+    }
+
     this.textBuffers.set(sessionId, "");
     this.toolCallBuffers.delete(sessionId);
   }
@@ -154,8 +150,8 @@ export class CoworkBridge {
     // Broadcast to group thread (for human overview)
     if (this.group.groupThreadId) {
       const label = member.role
-        ? `<b>${member.agentName} (${member.role})</b>`
-        : `<b>${member.agentName}</b>`;
+        ? `[${member.agentName} (${member.role})]`
+        : `[${member.agentName}]`;
 
       this.deps
         .sendMessage(this.group.groupThreadId, {

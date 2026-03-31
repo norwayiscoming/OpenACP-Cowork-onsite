@@ -46,21 +46,23 @@ describe("CoworkBridge", () => {
     expect(deps.enqueuePrompt).not.toHaveBeenCalled();
   });
 
-  it("broadcasts explicit [STATUS] and notifies other agents", () => {
+  it("broadcasts [STATUS] on turn end and notifies other agents", () => {
     bridge.handleAgentEvent("s1", { type: "text", content: "[STATUS]\nDONE: built API\n" } as any);
+    // Not broadcast yet — waiting for turn end
+    expect(deps.sendMessage).not.toHaveBeenCalled();
+    bridge.handleTurnEnd("s1");
+    // Now broadcast happens with full content
     expect(deps.sendMessage).toHaveBeenCalledTimes(1);
     expect(deps.enqueuePrompt).toHaveBeenCalledTimes(1);
-    bridge.handleTurnEnd("s1");
-    // No additional broadcast on turn end
-    expect(deps.sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("suppresses notification responses", () => {
-    // s1 posts status → notifies s2
+    // s1 posts status → turn ends → notifies s2
     bridge.handleAgentEvent("s1", { type: "text", content: "[STATUS]\nDONE: built auth API\n" } as any);
+    bridge.handleTurnEnd("s1");
     expect(deps.enqueuePrompt).toHaveBeenCalledTimes(1);
 
-    // s2 responds to notification → should NOT broadcast
+    // s2 responds to notification with [STATUS] → should NOT broadcast
     bridge.handleAgentEvent("s2", { type: "text", content: "[STATUS]\nAcknowledged\n" } as any);
     bridge.handleTurnEnd("s2");
     // sendMessage called once for s1's status, NOT for s2's notification response
