@@ -39,32 +39,36 @@ describe("CoworkBridge", () => {
     expect(deps.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("auto-broadcasts on turn end with accumulated text", () => {
+  it("does NOT auto-broadcast text-only turns", () => {
     bridge.handleAgentEvent("s1", { type: "text", content: "Built the API endpoint for users" } as any);
     bridge.handleTurnEnd("s1");
-    expect(deps.sendMessage).toHaveBeenCalledTimes(1);
-    expect(deps.enqueuePrompt).toHaveBeenCalledTimes(1);
+    expect(deps.sendMessage).not.toHaveBeenCalled();
+    expect(deps.enqueuePrompt).not.toHaveBeenCalled();
   });
 
-  it("broadcasts explicit [STATUS] immediately", () => {
+  it("broadcasts explicit [STATUS] and notifies other agents", () => {
     bridge.handleAgentEvent("s1", { type: "text", content: "[STATUS]\nDONE: built API\n" } as any);
     expect(deps.sendMessage).toHaveBeenCalledTimes(1);
+    expect(deps.enqueuePrompt).toHaveBeenCalledTimes(1);
     bridge.handleTurnEnd("s1");
+    // No additional broadcast on turn end
     expect(deps.sendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it("suppresses notification loop", () => {
-    bridge.handleAgentEvent("s1", { type: "text", content: "Built the API endpoint for auth" } as any);
-    bridge.handleTurnEnd("s1");
+  it("suppresses notification responses", () => {
+    // s1 posts status → notifies s2
+    bridge.handleAgentEvent("s1", { type: "text", content: "[STATUS]\nDONE: built auth API\n" } as any);
     expect(deps.enqueuePrompt).toHaveBeenCalledTimes(1);
 
-    bridge.handleAgentEvent("s2", { type: "text", content: "Acknowledged the API update" } as any);
+    // s2 responds to notification → should NOT broadcast
+    bridge.handleAgentEvent("s2", { type: "text", content: "[STATUS]\nAcknowledged\n" } as any);
     bridge.handleTurnEnd("s2");
+    // sendMessage called once for s1's status, NOT for s2's notification response
+    expect(deps.sendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it("skips auto-broadcast for short content", () => {
-    bridge.handleAgentEvent("s1", { type: "text", content: "ok" } as any);
-    bridge.handleTurnEnd("s1");
+  it("does not broadcast short content even with [STATUS]", () => {
+    bridge.handleAgentEvent("s1", { type: "text", content: "[STATUS]\n" } as any);
     expect(deps.sendMessage).not.toHaveBeenCalled();
   });
 
@@ -82,11 +86,10 @@ describe("CoworkBridge", () => {
     expect(bridge.buildCoworkContext("unknown")).toBe("");
   });
 
-  it("tracks tool calls in auto-status", () => {
+  it("does NOT broadcast tool calls without explicit [STATUS]", () => {
     bridge.handleAgentEvent("s1", { type: "tool_call", name: "write_file", status: "completed" } as any);
     bridge.handleAgentEvent("s1", { type: "text", content: "Created the user model file" } as any);
     bridge.handleTurnEnd("s1");
-    const call = (deps.sendMessage as any).mock.calls[0];
-    expect(call[1].text).toContain("write_file");
+    expect(deps.sendMessage).not.toHaveBeenCalled();
   });
 });

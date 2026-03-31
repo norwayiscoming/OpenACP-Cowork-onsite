@@ -106,7 +106,11 @@ export class CoworkBridge {
       if (statusMatch) {
         const statusContent = statusMatch[1].trim();
         if (statusContent.length > 0) {
-          this.broadcastStatus(sessionId, statusContent);
+          // Don't broadcast if this session is responding to a notification
+          const pending = this.pendingNotifications.get(sessionId) ?? 0;
+          if (pending === 0) {
+            this.broadcastStatus(sessionId, statusContent);
+          }
           this.explicitStatusPosted.add(sessionId);
           this.textBuffers.set(sessionId, "");
         }
@@ -119,49 +123,14 @@ export class CoworkBridge {
   }
 
   private handlePromptComplete(sessionId: string): void {
-    // If this turn was a notification response, don't broadcast or notify
+    // If this turn was a notification response, just clean up
     const pending = this.pendingNotifications.get(sessionId) ?? 0;
     if (pending > 0) {
       this.pendingNotifications.set(sessionId, pending - 1);
-      this.textBuffers.set(sessionId, "");
-      this.toolCallBuffers.delete(sessionId);
-      this.explicitStatusPosted.delete(sessionId);
-      return;
     }
 
-    if (this.explicitStatusPosted.has(sessionId)) {
-      this.explicitStatusPosted.delete(sessionId);
-      this.textBuffers.set(sessionId, "");
-      this.toolCallBuffers.delete(sessionId);
-      return;
-    }
-
-    const text = (this.textBuffers.get(sessionId) ?? "").trim();
-    const tools = this.toolCallBuffers.get(sessionId) ?? [];
-
-    if (text.length < 10 && tools.length === 0) {
-      this.textBuffers.set(sessionId, "");
-      this.toolCallBuffers.delete(sessionId);
-      return;
-    }
-
-    let autoStatus = "";
-    if (tools.length > 0) {
-      const uniqueTools = [...new Set(tools)];
-      autoStatus += `Tools: ${uniqueTools.join(", ")}\n`;
-    }
-    if (text.length > 0) {
-      const truncated =
-        text.length > AUTO_STATUS_MAX_LENGTH
-          ? text.slice(0, AUTO_STATUS_MAX_LENGTH) + "\u2026"
-          : text;
-      autoStatus += truncated;
-    }
-
-    if (autoStatus.trim().length > 0) {
-      this.broadcastStatus(sessionId, autoStatus.trim());
-    }
-
+    // Explicit [STATUS] already handled in handleTextEvent — just clean up
+    this.explicitStatusPosted.delete(sessionId);
     this.textBuffers.set(sessionId, "");
     this.toolCallBuffers.delete(sessionId);
   }
