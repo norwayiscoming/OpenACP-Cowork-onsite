@@ -16,6 +16,7 @@ function mockDeps(overrides?: Partial<CoworkBridgeDeps>): CoworkBridgeDeps {
 function makeGroup(): CoworkGroup {
   const g = new CoworkGroup({ name: "test", channelId: "telegram", threadId: "t1" });
   g.workspacePath = "/tmp/cowork-test";
+  g.groupThreadId = "group-thread-1";
   g.addMember({ sessionId: "s1", agentName: "claude", role: "backend" });
   g.addMember({ sessionId: "s2", agentName: "cursor", role: "frontend" });
   return g;
