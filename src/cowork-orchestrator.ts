@@ -101,6 +101,16 @@ export class CoworkOrchestrator {
     await fs.mkdir(path.join(groupWorkspace, "status"), { recursive: true });
     group.workspacePath = groupWorkspace;
 
+    // Create group thread (shared topic for human overview)
+    const groupThreadSession = await this.core.createSession({
+      channelId: params.channelId,
+      agentName: params.members[0].agentName,
+      workingDirectory: groupWorkspace,
+      createThread: true,
+      initialName: `🤝 ${params.name}`,
+    });
+    group.groupThreadId = groupThreadSession.id;
+
     const sessions: Array<{ id: string; enqueuePrompt(text: string): Promise<void> }> = [];
 
     for (const member of params.members) {
