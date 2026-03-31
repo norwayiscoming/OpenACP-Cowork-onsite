@@ -105,7 +105,7 @@ export class CoworkOrchestrator {
 
     const baseWorkspace = params.members[0]?.workingDirectory ?? ".";
     const groupWorkspace = path.join(baseWorkspace, `cowork-${group.id}`);
-    await fs.mkdir(path.join(groupWorkspace, "status"), { recursive: true });
+    await fs.mkdir(groupWorkspace, { recursive: true });
     group.workspacePath = groupWorkspace;
 
     // Create group thread (shared topic for human overview)

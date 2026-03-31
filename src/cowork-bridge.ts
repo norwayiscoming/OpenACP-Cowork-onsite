@@ -1,5 +1,3 @@
-import path from "node:path";
-import fs from "node:fs/promises";
 import { nanoid } from "nanoid";
 import type { CoworkGroup } from "./cowork-group.js";
 import type { StatusEntry, CoworkStatusType } from "./types.js";
@@ -72,9 +70,6 @@ export class CoworkBridge {
       lines.push("");
     }
 
-    if (this.group.workspacePath) {
-      lines.push(`Status folder: ${path.join(this.group.workspacePath, "status")}`);
-    }
     lines.push("Follow decisions made by other agents. Flag conflicts if you see any.");
     return lines.join("\n");
   }
@@ -88,61 +83,10 @@ export class CoworkBridge {
 
   private handleToolCallEvent(sessionId: string, event: AgentEvent): void {
     if (event.type !== "tool_call") return;
-
     const tools = this.toolCallBuffers.get(sessionId) ?? [];
     const label = event.name + (event.status === "completed" ? " \u2713" : "");
     tools.push(label);
     this.toolCallBuffers.set(sessionId, tools);
-
-    // Detect file writes to status/ folder as status submission
-    if (event.status === "completed" && this.isStatusFileWrite(event)) {
-      this.handleStatusFileWrite(sessionId, event);
-    }
-  }
-
-  private isStatusFileWrite(event: AgentEvent & { type: "tool_call" }): boolean {
-    const writingTools = ["write", "edit", "create", "write_file", "create_file"];
-    if (!writingTools.includes(event.name.toLowerCase())) return false;
-
-    // Check rawInput for file path containing status/
-    const input = event.rawInput as Record<string, unknown> | undefined;
-    if (!input) return false;
-    const filePath = (input.file_path ?? input.path ?? input.filename ?? "") as string;
-    return filePath.includes("status/") && filePath.endsWith(".json");
-  }
-
-  private handleStatusFileWrite(sessionId: string, event: AgentEvent & { type: "tool_call" }): void {
-    // Don't broadcast if responding to a notification
-    const pending = this.pendingNotifications.get(sessionId) ?? 0;
-    if (pending > 0) return;
-
-    // Try to extract content from the tool's output or input
-    let statusContent = "";
-    const input = event.rawInput as Record<string, unknown> | undefined;
-    const content = (event.content ?? input?.content ?? input?.new_string ?? "") as string;
-
-    if (typeof content === "string" && content.length > 0) {
-      // Try to parse JSON status file content
-      try {
-        const parsed = JSON.parse(content);
-        statusContent = typeof parsed === "object"
-          ? Object.entries(parsed).map(([k, v]) => `${k}: ${v}`).join("\n")
-          : String(parsed);
-      } catch {
-        statusContent = content;
-      }
-    }
-
-    // Fallback: use accumulated text buffer as status
-    if (!statusContent) {
-      statusContent = (this.textBuffers.get(sessionId) ?? "").trim();
-    }
-
-    if (statusContent.length > 0) {
-      this.broadcastStatus(sessionId, statusContent);
-      this.explicitStatusPosted.add(sessionId);
-      this.textBuffers.set(sessionId, "");
-    }
   }
 
   private handleTextEvent(sessionId: string, content: string): void {
@@ -207,10 +151,6 @@ export class CoworkBridge {
       }
     }
 
-    this.writeStatusFile(entry).catch(err =>
-      this.deps.log.error(`Failed to write status file: ${err}`),
-    );
-
     // Broadcast to group thread (for human overview)
     if (this.group.groupThreadId) {
       const label = member.role
@@ -264,15 +204,6 @@ export class CoworkBridge {
         this.deps.log.error(`Failed to notify agent ${otherSessionId}: ${err}`);
       });
     }
-  }
-
-  private async writeStatusFile(entry: StatusEntry): Promise<void> {
-    if (!this.group.workspacePath) return;
-    const statusDir = path.join(this.group.workspacePath, "status");
-    await fs.mkdir(statusDir, { recursive: true });
-    const fileName = `${entry.timestamp.replace(/[:.]/g, "-")}_${entry.agentName}_${entry.id}.json`;
-    const filePath = path.join(statusDir, fileName);
-    await fs.writeFile(filePath, JSON.stringify(entry, null, 2), "utf-8");
   }
 
   private classifyStatus(content: string): CoworkStatusType {

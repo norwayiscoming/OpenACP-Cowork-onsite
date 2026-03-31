@@ -69,7 +69,7 @@ describe("buildCoworkSystemPrompt", () => {
     expect(prompt).toContain("(none yet)");
   });
 
-  it("uses workspace path in status folder", () => {
+  it("instructs to use [STATUS] blocks, not files", () => {
     const prompt = buildCoworkSystemPrompt({
       agentName: "claude",
       groupName: "Test",
@@ -77,6 +77,8 @@ describe("buildCoworkSystemPrompt", () => {
       otherMembers: [],
     });
 
-    expect(prompt).toContain("/workspace/project/status");
+    expect(prompt).toContain("[STATUS]");
+    expect(prompt).toContain("NOT in a file");
+    expect(prompt).toContain("Do NOT write to status/");
   });
 });
