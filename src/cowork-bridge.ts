@@ -87,13 +87,62 @@ export class CoworkBridge {
   }
 
   private handleToolCallEvent(sessionId: string, event: AgentEvent): void {
+    if (event.type !== "tool_call") return;
+
     const tools = this.toolCallBuffers.get(sessionId) ?? [];
-    const label =
-      event.type === "tool_call"
-        ? event.name + (event.status === "completed" ? " \u2713" : "")
-        : "";
+    const label = event.name + (event.status === "completed" ? " \u2713" : "");
     tools.push(label);
     this.toolCallBuffers.set(sessionId, tools);
+
+    // Detect file writes to status/ folder as status submission
+    if (event.status === "completed" && this.isStatusFileWrite(event)) {
+      this.handleStatusFileWrite(sessionId, event);
+    }
+  }
+
+  private isStatusFileWrite(event: AgentEvent & { type: "tool_call" }): boolean {
+    const writingTools = ["write", "edit", "create", "write_file", "create_file"];
+    if (!writingTools.includes(event.name.toLowerCase())) return false;
+
+    // Check rawInput for file path containing status/
+    const input = event.rawInput as Record<string, unknown> | undefined;
+    if (!input) return false;
+    const filePath = (input.file_path ?? input.path ?? input.filename ?? "") as string;
+    return filePath.includes("status/") && filePath.endsWith(".json");
+  }
+
+  private handleStatusFileWrite(sessionId: string, event: AgentEvent & { type: "tool_call" }): void {
+    // Don't broadcast if responding to a notification
+    const pending = this.pendingNotifications.get(sessionId) ?? 0;
+    if (pending > 0) return;
+
+    // Try to extract content from the tool's output or input
+    let statusContent = "";
+    const input = event.rawInput as Record<string, unknown> | undefined;
+    const content = (event.content ?? input?.content ?? input?.new_string ?? "") as string;
+
+    if (typeof content === "string" && content.length > 0) {
+      // Try to parse JSON status file content
+      try {
+        const parsed = JSON.parse(content);
+        statusContent = typeof parsed === "object"
+          ? Object.entries(parsed).map(([k, v]) => `${k}: ${v}`).join("\n")
+          : String(parsed);
+      } catch {
+        statusContent = content;
+      }
+    }
+
+    // Fallback: use accumulated text buffer as status
+    if (!statusContent) {
+      statusContent = (this.textBuffers.get(sessionId) ?? "").trim();
+    }
+
+    if (statusContent.length > 0) {
+      this.broadcastStatus(sessionId, statusContent);
+      this.explicitStatusPosted.add(sessionId);
+      this.textBuffers.set(sessionId, "");
+    }
   }
 
   private handleTextEvent(sessionId: string, content: string): void {

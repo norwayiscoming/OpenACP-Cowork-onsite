@@ -19,7 +19,7 @@ const settingsSchema = z.object({
 function createCoworkPlugin(): OpenACPPlugin {
   return {
     name: "openacp-cowork",
-    version: "1.0.6",
+    version: "1.0.7",
     description: "Multi-agent collaboration groups with status broadcasting and context injection",
     pluginDependencies: {
       "@openacp/security": "^1.0.0",
