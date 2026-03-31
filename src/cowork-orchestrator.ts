@@ -75,13 +75,6 @@ export class CoworkOrchestrator {
           } catch { /* try next */ }
         }
       },
-      enqueuePrompt: async (sessionId, text) => {
-        const session = this.core.sessionManager.getSession(sessionId);
-        if (session) await session.enqueuePrompt(text);
-      },
-      getSessionStatus: (sessionId) => {
-        return this.core.sessionManager.getSession(sessionId)?.status;
-      },
     };
   }
 

@@ -13,16 +13,13 @@ const AUTO_STATUS_MAX_LENGTH = 3000;
 export interface CoworkBridgeDeps {
   log: Logger;
   contextInjectionLimit: number;
-  sendMessage: (sessionId: string, content: { type: "text"; text: string }) => Promise<void>;
-  enqueuePrompt: (sessionId: string, text: string) => Promise<void>;
-  getSessionStatus: (sessionId: string) => string | undefined;
+  sendMessage: (threadId: string, content: { type: "text"; text: string }) => Promise<void>;
 }
 
 export class CoworkBridge {
   private textBuffers: Map<string, string> = new Map();
   private explicitStatusPosted: Set<string> = new Set();
   private toolCallBuffers: Map<string, string[]> = new Map();
-  private suppressNotification: Set<string> = new Set();
   private memberSessionIds: Set<string>;
 
   constructor(
@@ -83,7 +80,6 @@ export class CoworkBridge {
     this.textBuffers.clear();
     this.explicitStatusPosted.clear();
     this.toolCallBuffers.clear();
-    this.suppressNotification.clear();
   }
 
   private handleToolCallEvent(sessionId: string, event: AgentEvent): void {
@@ -119,15 +115,6 @@ export class CoworkBridge {
   }
 
   private handlePromptComplete(sessionId: string): void {
-    const isSuppressed = this.suppressNotification.has(sessionId);
-    if (isSuppressed) {
-      this.suppressNotification.delete(sessionId);
-      this.explicitStatusPosted.delete(sessionId);
-      this.textBuffers.set(sessionId, "");
-      this.toolCallBuffers.delete(sessionId);
-      return;
-    }
-
     if (this.explicitStatusPosted.has(sessionId)) {
       this.explicitStatusPosted.delete(sessionId);
       this.textBuffers.set(sessionId, "");
@@ -206,8 +193,6 @@ export class CoworkBridge {
     this.deps.log.info(
       `Status broadcast: group=${this.group.id} session=${sessionId} type=${entry.type}`,
     );
-
-    this.notifyOtherAgents(sessionId, entry);
   }
 
   private async writeStatusFile(entry: StatusEntry): Promise<void> {
@@ -217,39 +202,6 @@ export class CoworkBridge {
     const fileName = `${entry.timestamp.replace(/[:.]/g, "-")}_${entry.agentName}_${entry.id}.json`;
     const filePath = path.join(statusDir, fileName);
     await fs.writeFile(filePath, JSON.stringify(entry, null, 2), "utf-8");
-  }
-
-  private notifyOtherAgents(fromSessionId: string, entry: StatusEntry): void {
-    for (const otherSessionId of this.memberSessionIds) {
-      if (otherSessionId === fromSessionId) continue;
-
-      const status = this.deps.getSessionStatus(otherSessionId);
-      if (status !== "active") continue;
-
-      const roleLabel = entry.role ? ` (${entry.role})` : "";
-      const statusDir = this.group.workspacePath
-        ? path.join(this.group.workspacePath, "status")
-        : "";
-
-      const notification = [
-        `[Cowork Update \u2014 ${entry.agentName}${roleLabel} just completed a task]`,
-        "",
-        entry.content.length > 500 ? entry.content.slice(0, 500) + "..." : entry.content,
-        "",
-        statusDir ? `Full status history: ${statusDir}` : "",
-        "",
-        "If this affects your current work, adapt accordingly. Otherwise, continue with your task.",
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      this.suppressNotification.add(otherSessionId);
-
-      this.deps.enqueuePrompt(otherSessionId, notification).catch(err => {
-        this.suppressNotification.delete(otherSessionId);
-        this.deps.log.error(`Failed to notify agent ${otherSessionId}: ${err}`);
-      });
-    }
   }
 
   private classifyStatus(content: string): CoworkStatusType {
