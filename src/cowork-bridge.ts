@@ -22,7 +22,7 @@ export class CoworkBridge {
   private textBuffers: Map<string, string> = new Map();
   private explicitStatusPosted: Set<string> = new Set();
   private toolCallBuffers: Map<string, string[]> = new Map();
-  private notificationResponses: Set<string> = new Set();
+  private pendingNotifications: Map<string, number> = new Map();
   private memberSessionIds: Set<string>;
 
   constructor(
@@ -83,7 +83,7 @@ export class CoworkBridge {
     this.textBuffers.clear();
     this.explicitStatusPosted.clear();
     this.toolCallBuffers.clear();
-    this.notificationResponses.clear();
+    this.pendingNotifications.clear();
   }
 
   private handleToolCallEvent(sessionId: string, event: AgentEvent): void {
@@ -120,8 +120,9 @@ export class CoworkBridge {
 
   private handlePromptComplete(sessionId: string): void {
     // If this turn was a notification response, don't broadcast or notify
-    if (this.notificationResponses.has(sessionId)) {
-      this.notificationResponses.delete(sessionId);
+    const pending = this.pendingNotifications.get(sessionId) ?? 0;
+    if (pending > 0) {
+      this.pendingNotifications.set(sessionId, pending - 1);
       this.textBuffers.set(sessionId, "");
       this.toolCallBuffers.delete(sessionId);
       this.explicitStatusPosted.delete(sessionId);
@@ -235,11 +236,13 @@ export class CoworkBridge {
         "- If not relevant, just acknowledge and stay idle",
       ].join("\n");
 
-      // Mark this session as responding to a notification
-      this.notificationResponses.add(otherSessionId);
+      // Increment pending notification counter for this session
+      const current = this.pendingNotifications.get(otherSessionId) ?? 0;
+      this.pendingNotifications.set(otherSessionId, current + 1);
 
       this.deps.enqueuePrompt(otherSessionId, notification).catch(err => {
-        this.notificationResponses.delete(otherSessionId);
+        const c = this.pendingNotifications.get(otherSessionId) ?? 0;
+        if (c > 0) this.pendingNotifications.set(otherSessionId, c - 1);
         this.deps.log.error(`Failed to notify agent ${otherSessionId}: ${err}`);
       });
     }
