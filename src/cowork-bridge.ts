@@ -14,12 +14,15 @@ export interface CoworkBridgeDeps {
   log: Logger;
   contextInjectionLimit: number;
   sendMessage: (threadId: string, content: { type: "text"; text: string }) => Promise<void>;
+  enqueuePrompt: (sessionId: string, text: string) => Promise<void>;
+  getSessionStatus: (sessionId: string) => string | undefined;
 }
 
 export class CoworkBridge {
   private textBuffers: Map<string, string> = new Map();
   private explicitStatusPosted: Set<string> = new Set();
   private toolCallBuffers: Map<string, string[]> = new Map();
+  private notificationResponses: Set<string> = new Set();
   private memberSessionIds: Set<string>;
 
   constructor(
@@ -80,6 +83,7 @@ export class CoworkBridge {
     this.textBuffers.clear();
     this.explicitStatusPosted.clear();
     this.toolCallBuffers.clear();
+    this.notificationResponses.clear();
   }
 
   private handleToolCallEvent(sessionId: string, event: AgentEvent): void {
@@ -115,6 +119,15 @@ export class CoworkBridge {
   }
 
   private handlePromptComplete(sessionId: string): void {
+    // If this turn was a notification response, don't broadcast or notify
+    if (this.notificationResponses.has(sessionId)) {
+      this.notificationResponses.delete(sessionId);
+      this.textBuffers.set(sessionId, "");
+      this.toolCallBuffers.delete(sessionId);
+      this.explicitStatusPosted.delete(sessionId);
+      return;
+    }
+
     if (this.explicitStatusPosted.has(sessionId)) {
       this.explicitStatusPosted.delete(sessionId);
       this.textBuffers.set(sessionId, "");
@@ -179,20 +192,57 @@ export class CoworkBridge {
       this.deps.log.error(`Failed to write status file: ${err}`),
     );
 
-    const label = member.role
-      ? `<b>${member.agentName} (${member.role})</b>`
-      : `<b>${member.agentName}</b>`;
+    // Broadcast to group thread (for human overview)
+    if (this.group.groupThreadId) {
+      const label = member.role
+        ? `<b>${member.agentName} (${member.role})</b>`
+        : `<b>${member.agentName}</b>`;
 
-    this.deps
-      .sendMessage(this.group.threadId, {
-        type: "text",
-        text: `${label}\n\n${content}`,
-      })
-      .catch((err: unknown) => this.deps.log.error(`Failed to broadcast status: ${err}`));
+      this.deps
+        .sendMessage(this.group.groupThreadId, {
+          type: "text",
+          text: `${label}\n\n${content}`,
+        })
+        .catch((err: unknown) => this.deps.log.error(`Failed to broadcast status: ${err}`));
+    }
 
     this.deps.log.info(
       `Status broadcast: group=${this.group.id} session=${sessionId} type=${entry.type}`,
     );
+
+    // Notify other agents
+    this.notifyOtherAgents(sessionId, entry);
+  }
+
+  private notifyOtherAgents(fromSessionId: string, entry: StatusEntry): void {
+    for (const otherSessionId of this.memberSessionIds) {
+      if (otherSessionId === fromSessionId) continue;
+
+      const status = this.deps.getSessionStatus(otherSessionId);
+      if (status !== "active" && status !== "idle") continue;
+
+      const roleLabel = entry.role ? ` (${entry.role})` : "";
+
+      const notification = [
+        `[Cowork Update — ${entry.agentName}${roleLabel} completed a task]`,
+        "",
+        entry.content.length > 500 ? entry.content.slice(0, 500) + "..." : entry.content,
+        "",
+        "Read the update above and report back to the human in this thread:",
+        "- Briefly summarize what happened",
+        "- If this is relevant to your work, explain how",
+        "- Ask the human if they want you to take any action",
+        "- If not relevant, just acknowledge and stay idle",
+      ].join("\n");
+
+      // Mark this session as responding to a notification
+      this.notificationResponses.add(otherSessionId);
+
+      this.deps.enqueuePrompt(otherSessionId, notification).catch(err => {
+        this.notificationResponses.delete(otherSessionId);
+        this.deps.log.error(`Failed to notify agent ${otherSessionId}: ${err}`);
+      });
+    }
   }
 
   private async writeStatusFile(entry: StatusEntry): Promise<void> {
