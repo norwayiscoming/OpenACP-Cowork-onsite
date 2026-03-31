@@ -124,7 +124,7 @@ async function handleNew(
     const memberList = members.map(m => m.role ? `${m.agentName} (${m.role})` : m.agentName).join(", ");
     await args.reply({
       type: "text",
-      text: `Cowork group "${groupName}" created with ${sessions.length} agent(s): ${memberList}`,
+      text: `🤝 Cowork group "${groupName}" created!\n\nAgents: ${memberList}\nGroup thread: ${group.name}\n\nAgents will notify each other on task completion. Status updates appear in the group thread.`,
     });
   } catch (err) {
     await args.reply({ type: "text", text: `Failed to create cowork group: ${err}` });
