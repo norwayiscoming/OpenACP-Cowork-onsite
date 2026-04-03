@@ -24,6 +24,7 @@ export interface CoworkGroupRecord {
   name: string;
   channelId: string;
   threadId: string;
+  groupThreadId?: string;
   workspacePath?: string;
   members: CoworkMemberRecord[];
   statusLog: StatusEntry[];

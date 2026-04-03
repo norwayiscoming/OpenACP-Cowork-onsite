@@ -14,6 +14,7 @@ export class CoworkGroup {
   name: string;
   channelId: string;
   threadId: string;
+  groupThreadId?: string;
   workspacePath?: string;
   members: Map<string, CoworkMember> = new Map();
   statusLog: StatusEntry[] = [];
@@ -79,6 +80,7 @@ export class CoworkGroup {
       name: this.name,
       channelId: this.channelId,
       threadId: this.threadId,
+      groupThreadId: this.groupThreadId,
       workspacePath: this.workspacePath,
       members,
       statusLog: this.statusLog,
@@ -95,6 +97,7 @@ export class CoworkGroup {
       createdAt: new Date(record.createdAt),
     });
     group.workspacePath = record.workspacePath;
+    group.groupThreadId = record.groupThreadId;
     for (const m of record.members) {
       group.members.set(m.sessionId, {
         sessionId: m.sessionId,

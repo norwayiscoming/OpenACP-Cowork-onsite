@@ -50,8 +50,8 @@ function mockPluginContext(overrides?: Record<string, unknown>) {
 
 describe("Cowork Plugin", () => {
   it("has correct plugin metadata", () => {
-    expect(coworkPlugin.name).toBe("@openacp/cowork");
-    expect(coworkPlugin.version).toBe("1.0.0");
+    expect(coworkPlugin.name).toBe("openacp-cowork");
+    expect(coworkPlugin.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(coworkPlugin.permissions).toContain("kernel:access");
     expect(coworkPlugin.permissions).toContain("commands:register");
     expect(coworkPlugin.settingsSchema).toBeDefined();
