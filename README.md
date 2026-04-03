@@ -14,41 +14,23 @@ OpenACP Cowork enables multiple AI agents to collaborate on shared tasks — wit
 ### Install the plugin
 
 ```bash
-openacp install @openacp/cowork
+openacp plugin install openacp-cowork
 ```
 
 That's it. The plugin is automatically registered in your config and will load on next start.
 
-### Install from Git (if not published to npm)
-
-```bash
-openacp install git+https://github.com/norwayiscoming/OpenACP-Cowork.git
-```
-
-### Install from local path (for development)
-
-```bash
-openacp install /path/to/openacp-cowork
-```
-
 ### Verify installation
 
 ```bash
-openacp plugins
+openacp plugin list
 ```
 
-You should see `@openacp/cowork` in the list.
+You should see `openacp-cowork` in the list.
 
 ### Start OpenACP
 
 ```bash
-openacp start
-```
-
-Look for this line in the logs:
-
-```
-INFO: Core plugin loaded — plugin: "cowork", version: "0.1.0"
+openacp
 ```
 
 ## Quick Start
@@ -208,7 +190,7 @@ All agents in a group share the same workspace. The `status/` subdirectory conta
 ## Uninstall
 
 ```bash
-openacp install @openacp/cowork
+openacp plugin remove openacp-cowork
 ```
 
 The plugin is automatically removed from your config.
@@ -216,23 +198,17 @@ The plugin is automatically removed from your config.
 ## Development
 
 ```bash
-git clone https://github.com/norwayiscoming/OpenACP-Cowork.git
-cd OpenACP-Cowork
+git clone https://github.com/norwayiscoming/openacp-cowork.git
+cd openacp-cowork
 npm install
 npm run build
 npm test
 ```
 
-To test locally with OpenACP:
+To dev with hot-reload:
 
 ```bash
-# Link the plugin
-npm link
-cd ~/.openacp/plugins
-npm link @openacp/cowork
-
-# Restart OpenACP
-openacp stop && openacp start
+openacp dev /path/to/openacp-cowork
 ```
 
 ## Design Principles
